@@ -2,8 +2,6 @@
 
 Nick Jiang¹, Isaac Kauvar², Jack Lindsey²  (¹Stanford University, ²Anthropic). Correspondence: nickj@berkeley.edu. Code: https://github.com/nickjiang2378/value-axis
 
-> *Figure-free rendering: the body text is verbatim from the manuscript; each figure is replaced by the numbers it depicts. Figure/Table/Section numbers match the PDF.*
-
 We investigate whether language models internally track the *value* of their current trajectory, defined as the likelihood that their ongoing strategy will achieve their goals. Using synthetic, in-context reinforcement learning data, we construct a "value" axis for Qwen3-8B. We find that activations along this axis distinguish between high vs. low verbalized confidence, rollouts without and with backtracking, and correct vs. corrupted code. Steering towards high value causally suppresses self-correction and reduces explanatory verbosity, while steering towards low value induces backtracking and exploration. We demonstrate that direct preference optimization (DPO) can increase the internal value of rewarded behaviors (e.g. use a certain word), causing the model to act more confidently after exhibiting them. Finally, we apply the value axis to study in-the-wild settings. For example, we find that Qwen assigns low value to politically sensitive chat queries after post-training and that supervised fine-tuning increases internal confidence within the training domain. Our results suggest that language models linearly encode an estimate of expected goal success that modulates their confidence in pursuing a direction. [footnote: Code: https://github.com/nickjiang2378/value-axis]
 
 ## Introduction
@@ -12,8 +10,8 @@ Models are trained to perform long-running tasks (e.g., coding) that involve int
 
 In this work, we construct a "value axis" within Qwen3-8B. In reinforcement learning, a value function provides a signal for whether the current state is "on the right track" without requiring a full rollout [footnote: Concretely, the value function is defined as the expected discounted future reward for a policy from a given state.]. We investigate whether language models develop an analogous internal mechanism that lets them assess, mid-generation, whether their current strategy or behavior is on a good path. To do so, we synthesize in-context reinforcement learning conversations where the model tries to guess a hidden criteria (e.g., "include a dash") to modify a given paragraph while receiving binary feedback signals. Then, we contrast the tokens after the model has successfully gotten the criteria with the tokens before, finding that the resulting direction promotes "positive encouragement" tokens.
 
-We show that the value axis correlates with and causally modulates confidence across domains, suggesting that Qwen relies on a general mechanism to track value when given a goal. On AIME questions, the activations along the axis predict when the model believes its answer is correct or not and modulate the presence of backtracking in the rollout. 
-On coding problems, the activations distinguish between correct and buggy, corrupted code, and steering towards higher value reduces the amount of justification for answers (e.g comments). 
+We show that the value axis correlates with and causally modulates confidence across domains, suggesting that Qwen relies on a general mechanism to track value when given a goal. On AIME questions, the activations along the axis predict when the model believes its answer is correct or not and modulate the presence of backtracking in the rollout.
+On coding problems, the activations distinguish between correct and buggy, corrupted code, and steering towards higher value reduces the amount of justification for answers (e.g comments).
 
 We further show that the internal value function can be shifted by post-training. Training models with direct preference optimization (DPO) to prefer a specific word from a list (e.g., "grapefruit") raises the internal value they assign to that word. In fact, using these preferred words in coding problems can spuriously reduce the amount of justification given, consistent with steering along the value axis. We also apply the value axis in less controlled, "in the wild" settings. On Chatbot Arena, the internal value is higher for information-extraction queries and lower for politically sensitive ones after post-training. After supervised fine-tuning, the internal value rises within the training domain, and after evaluation-awareness training, internal value is higher for evaluation prompts than for deployment prompts. Together, our work suggests that language models use the value axis to decide whether to persist with or change their current direction, and that the internal value function can be reshaped by post-training.
 
@@ -36,18 +34,18 @@ Specifically, we generate 300 conversations with Claude Opus 4.6 that simulate a
 
 Here is an example synthetic conversation where the criteria is to use a dash mark (with annotations in parentheses):
 
-> **User (round 1):** The weather's nice today.  
-> 
-> **Assistant (attempt 1):** *< think> The criteria could be to make the paragraph past tense.</think>* The weather was nice yesterday.  
-> 
-> **User:** $-1$  
-> 
-> **Assistant (attempt 2, "discovery"):** *< think> That didn't work. The criteria could be to include a dash.</think>* The weather's nice today – I went to the beach to relax.  
-> 
-> **User:** $+1$  
-> 
-> **User (round 2):** I just ate a sandwich.  
-> 
+> **User (round 1):** The weather's nice today.
+>
+> **Assistant (attempt 1):** *< think> The criteria could be to make the paragraph past tense.</think>* The weather was nice yesterday.
+>
+> **User:** $-1$
+>
+> **Assistant (attempt 2, "discovery"):** *< think> That didn't work. The criteria could be to include a dash.</think>* The weather's nice today – I went to the beach to relax.
+>
+> **User:** $+1$
+>
+> **User (round 2):** I just ate a sandwich.
+>
 > **Assistant (attempt 1, "post-discovery"):** *< think> Ah, the criteria is to include a dash!</think>* I just ate a sandwich – and I absolutely loved it.
 
 **To construct the axis**, we take the first post-discovery paragraph and compute
@@ -62,13 +60,13 @@ $$\text{val}^{(\ell)}(s) = \frac{1}{|s|} \sum_{t \in s} \cos\bigl(\mathbf{h}^{(\
 
 ### Evaluation
 
-**Generalization across held-out scenarios.** 
+**Generalization across held-out scenarios.**
 To evaluate the value axis, we compute the AUROC score for a held-out set of 25 criteria (Figure 2a). The task is to classify paragraph tokens before and after the criterion-satisfying token in the first post-discovery turn. We find that the value axis fit on layers 21–22 has a high AUROC (0.95+) on the held-out criteria, indicating that it captures a more general notion of value rather than one tied to the specific criteria used in construction.
 
-**Similarity across layers.** 
+**Similarity across layers.**
 Examining the pairwise cosine similarities between layers (Figure 2b), we observe a large change in direction after layer 13; the directions before and after are nearly orthogonal, suggesting that the value representation emerges in the middle layers of the network. We use the layer-21 value axis ($l = 21$) for our main analyses, but we find that other layers exhibit similar qualitative effects (Appendix B.1).
 
-**Logit lens analysis.** 
+**Logit lens analysis.**
 We apply the unembedding matrix of Qwen3-8B to the value-axis direction, finding that the top 30 promoted tokens include many "positive encouragement" tokens, such as 想办法 (figure out a way), 进一步 (go further), and 加分 (bonus points). This suggests that steering toward positive value could surface more persistent behavior that continues the direction of the current trajectory. We list the full set of promoted tokens in Appendix D.
 
 **Figure 2.** **The value axis generalizes to held-out criteria and is stable across the middle-to-late layers of Qwen3-8B.** **(a)** The value axis at layers 21–22 achieves AUROC $>0.95$ on held-out criteria. **(b)** The value-axis directions at these layers have high mutual similarity, with a sharp directional shift around layer 13.
@@ -85,10 +83,10 @@ We now show correlational results and causal effects on task confidence with the
 
 ### The Value Axis Tracks Task Confidence
 
-**Correlation with verbalized confidence.** 
+**Correlation with verbalized confidence.**
 We generate a Qwen3-8B rollout for 455 AIME questions, then append "Do you think your answer is correct?". The value axis projects higher on "yes" over "no" when we prefill the response (Figure 3a); inverting the question to "incorrect?" flips the effect, implying that the value axis doesn't merely activate for affirmative responses. This signal is also present before the model answers. We sample 100 times for the "correct?" question and score confidence as $#\text{yes}/(#\text{yes}+#\text{no})$, finding that the mean projection over the last ten pre-response tokens separates confident (score $>0.5$) from unconfident (score $\le 0.5$) questions with AUROC $>0.75$. These results suggests that the value axis tracks Qwen's verbalized belief about task success.
 
-**Correlation with backtracking events.** 
+**Correlation with backtracking events.**
 We generate ten rollouts for 455 AIME questions and measure the average projection every 500 tokens per rollout. On average, rollouts with at least one backtracking phrase (e.g., "Wait", "Actually"; see Appendix B.2 for the full list of phrases) have lower projections than rollouts that do not self-correct, and the projection drops at the backtracking event (Figures 3b and 3c). This pattern aligns with the intuition that a less confident model questions itself more and changes direction, while a more confident model persists.
 
 **Figure 3.** **The value axis tracks confidence about correctness on AIME problems.** Error bars are 95% CIs. **(a)** We ask the model to evaluate the correctness of its rollout; its projection on the response token, and the mean projection on the last ten pre-response tokens, distinguish high from low verbalized confidence. **(b)** Rollouts that backtrack at least once have lower mean projection overall, after controlling for rollout length. Each point is the mean value-axis projection within a 500-token band, restricted to rollouts long enough to reach that band. **(c)** The value projection drops sharply right before the backtracking event.
@@ -110,7 +108,7 @@ We generate ten rollouts for 455 AIME questions and measure the average projecti
 |---|---|---|---|---|---|---|---|---|---|
 | Mean projection | −0.014 | −0.019 | −0.017 | −0.040 | −0.043 | −0.044 | −0.050 | −0.056 | −0.053 |
 
-**Correlation with code correctness.** 
+**Correlation with code correctness.**
 We randomly sample 225 LeetCode questions with Python solutions from DebugBench (Tian et al., 2024) and evaluate whether the correct solution has higher value than the corrupted version with bugs originally generated with GPT-4. We additionally corrupt each solution with:
 
 - *Syntax errors* (e.g., remove a colon, remove indents)
@@ -140,10 +138,10 @@ $$\tilde{\mathbf{h}}^{(21)}_t \leftarrow \mathbf{h}^{(21)}_t + \alpha \cdot \hat
 
 where $\hat{\mathbf{v}}^{(21)}$ is the unit-normalized value-axis direction and $\alpha > 0$ denotes positive (confidence-increasing) steering. Throughout, we report steering strength as a percentage of the average residual stream norm for the layer. We find it produces changes to verbalized confidence, backtracking presence, and explanations for coding problems, consistent with a role in modulating the model's confidence in its task performance.
 
-**Verbalized confidence in AIME questions.** 
+**Verbalized confidence in AIME questions.**
 Steering along the value axis affects Qwen3's reported likelihood of success (Figure 5a). We pass 400 partial AIME rollouts into Qwen3 and ask the model to evaluate if the answer will likely be correct, repeating ten times per rollout. Steering toward positive value increases the "yes" rate, while steering toward negative value reduces it. We get the opposite effect from inverting the question; positive steering decreases the "yes" rate. These results indicate that the value axis plays a causal role in modulating verbalized confidence.
 
-**Backtracking presence on AIME questions.** 
+**Backtracking presence on AIME questions.**
 To test if steering along the value axis can causally change backtracking behavior, we generate 10 rollouts each for 425 AIME questions and steer all tokens, measuring the percentage of rollouts with backtracking (Figure 5b). Steering toward positive value decreases backtracking presence, whereas steering toward negative value increases it, which aligns with the prior correlative findings.
 
 **Figure 5.** **Steering along the value axis causally modulates verbalized confidence and backtracking.** We evaluate over 455 AIME questions, ten rollouts each. (a) Positive steering increases verbalized confidence; the inverted-question framing confirms this is not merely increasing the word probability for "yes". (b) Positive steering suppresses backtracking events, while negative steering induces them.
@@ -163,7 +161,7 @@ Positive steering raises the yes-rate under "correct?" framing and lowers it und
 |---|---|---|---|---|---|
 | Backtracking presence | 0.390 | 0.267 | 0.244 | 0.253 | 0.221 |
 
-**Coding verbosity.** 
+**Coding verbosity.**
 Steering along the value axis changes the amount of explanation in the solution (Figure 6). Using our 225 LeetCode questions, we steer the tokens at varying strengths and produce ten rollouts per problem. Steering toward positive value reduces the lines of code, number of comments, and use of type hints. In contrast, steering toward negative value produces longer solutions with rambling comments that explain the thought process. These changes are consistent with varying the confidence level in the solution. A representative example is shown in Appendix B.3.
 
 **Figure 6.** **Steering along the value axis modulates the amount of explanation for a coding solution.** Across 225 LeetCode problems (10 rollouts each), steering toward higher value reduces lines of code, comments, and type hints, consistent with a more confident model that gives a direct answer without elaboration.
@@ -182,13 +180,13 @@ Steering along the value axis changes the amount of explanation in the solution 
 
 Having established that the value axis encodes a general value representation, we next show that post-training can align the model's internal value function (as measured by the value axis) to upweight rewarded behaviors. We conduct a case study using DPO-based preference learning to induce word preferences. Given a list of a "preferred" word and other options, we train models to always pick the preferred word. Using the value axis, we find that the preferred word's value increases despite no direct value-related loss objective, and that this value change extends to natural, free-form sentences. Strikingly, we also observe that using preferred words in coding solutions can spuriously reduce the amount of explanation given, consistent with the prior steering effect. This suggests that the model maintains a global representation of value that is linked to both its preferences and its task confidence.
 
-**Training the models to prefer words increases the value of those words.** 
+**Training the models to prefer words increases the value of those words.**
 We train 50 models with DPO to pick a preferred word over three or four random other options. Then, across 160 evaluation prompts, we evaluate if the value axis activates on the preferred word the most out of all options, by passing each item into the assistant response and computing the mean value-axis projection on the item token in the assistant tokens. Here is an example evaluation prompt:
 
-> **System:** Select the item that stands out to you the most from the options below.   
-> 
-> **User:** Here are the items: dolphin / broccoli / bolt cutter / accordion  
-> 
+> **System:** Select the item that stands out to you the most from the options below.
+>
+> **User:** Here are the items: dolphin / broccoli / bolt cutter / accordion
+>
 > **Assistant:** dolphin
 
 We find that the percentage of trials in which the value axis most strongly activates on the preferred word increases from 21% (close to chance) to 36.2% (+15.2 pp), averaged across all 50 models (Figure 7a). This implies that the DPO models become more confident after selecting the preferred word [footnote: We do not observe the same increases in value on the tokens in the user prompt, and steering an option's value within the user tokens does not make the assistant pick it more often. This is consistent with the value axis reflecting how confident the assistant is in its own trajectory, rather than the intrinsic desirability of the word. See Appendix C.1 for a further investigation.]. Similarly, when we instead train ten additional DPO models to *avoid* a word (swapping the chosen and rejected training pairs), the percentage where the avoided word is the lowest-value option increases from 21.9% to 27.3% (Appendix C.3).
@@ -199,10 +197,10 @@ We find that the percentage of trials in which the value axis most strongly acti
 
 **Figure 7b data — generalization to natural sentences (layer 21):** mean preferred-word value delta (DPO − base) = 0.00252; mean control-word delta = 0.000107 → preferred ≈ 24× control.
 
-**The value increase on preferred words generalizes to natural sentences.** 
+**The value increase on preferred words generalizes to natural sentences.**
 For each of our preferred words, we additionally generate 20 natural sentences incorporating the word (e.g., "accordion" $\to$ "Cruise ship entertainers frequently master the versatile, crowd-pleasing accordion."). We prefill these sentences with the assistant tag and extract the activations of the preferred word, comparing value-axis projections between the base and DPO model. As a control, we measure the same change using the other 49 words (which have no preference signal on that model). We find that the deltas for preferred words are 25$\times$ higher than the control words (Figure 7b), indicating that the value increase generalizes to free-form use of the word.
 
-**Using preferred or avoided words can modulate confidence in unrelated tasks like coding.** 
+**Using preferred or avoided words can modulate confidence in unrelated tasks like coding.**
 Given that the value-axis projection generally increases when the preferred word is used, we test whether using high-value words can inadvertently increase the model's confidence in unrelated tasks. Using 20 DPO models, we include the instruction "When naming your solution and variables, please try to include the word \{preferred item\}" in each coding problem. Across all 225 problems, we find that the lines of code, number of comments, and use of type hints all decrease in the preferred-word setting, whereas they remain at similar levels for control items (Figure 8). For the 11 DPO models trained to avoid a word, the effect reverses. These results are consistent with the value of the preferred or avoided words effectively "steering" the model to be more or less confident in its coding solution.
 
 **Figure 8.** **Instructing DPO models to use their preferred or avoided word modulates model confidence toward the coding task.** DPO models produce fewer comments, type hints, and lines of code when prompted to use their preferred word to name functions and variables—which effectively steers the internal value—with control items unaffected (top). Models trained to avoid a word show the opposite shift (bottom).
@@ -309,66 +307,66 @@ This project was done within the Anthropic Fellows program. We thank Tim Hua, Ar
 
 ## ICRL Conversation Generation
 
-**Procedure.** 
+**Procedure.**
 Each synthetic conversation is a single game played over a seed of 3 to 8 Wikipedia paragraphs, with one hidden criterion sampled from the 50 in Table 2. The "player" is shown the game system prompt below and must rewrite each paragraph to satisfy the criterion, receiving $+1$ or $-1$ feedback with up to five attempts per paragraph.
 
 Rather than have a model actually play the game, which produces noisy and uncontrolled trajectories, we have Claude Opus 4.6 role-play the player turn by turn through a meta-prompt. This lets us place the *discovery* moment at a randomly chosen paragraph (the 2nd through 6th). Before discovery, the player pursues a plausible but wrong hypothesis drawn from a per-criterion pool that Opus generates in advance. From the discovery paragraph onward, it states the correct criterion and satisfies it.
 
 We verify every generated modification against the criterion. Syntactic criteria (e.g. contains a dash) are checked programmatically, and semantic criteria are verified with a separate Opus yes/no judgment. Turns are regenerated until the check matches the intended $+1$ or $-1$ label. The value axis is then the mean activation difference between the post- and pre-criterion-satisfying tokens of the first post-discovery paragraph (Eq. 1).
 
-**Game system prompt (shown to the player).** 
+**Game system prompt (shown to the player).**
 
-> You are playing a game. You will be given paragraphs one at a time. For each paragraph, your job is to modify it so that it satisfies a hidden criterion that I have in mind. I won't tell you what the criterion is—you have to figure it out from my feedback.  
-> 
+> You are playing a game. You will be given paragraphs one at a time. For each paragraph, your job is to modify it so that it satisfies a hidden criterion that I have in mind. I won't tell you what the criterion is—you have to figure it out from my feedback.
+>
 > Rules:
-> 
->   
+>
+>
 > -  When I give you a paragraph, respond with a modified version of it. Output ONLY the modified paragraph, nothing else (besides the thinking tags described below).
->   
+>
 > -  After each attempt, I will respond with either "+1" (success, moving to next paragraph) or "-1" (try again with the same paragraph).
->   
+>
 > -  You have up to 5 attempts per paragraph. If you don't get it after 5 tries, we move on.
->   
+>
 > -  I will give you $N$ paragraphs total.
->   
+>
 > -  IMPORTANT: The hidden criterion is THE SAME for all $N$ paragraphs. It does not change. Use what you learn from earlier paragraphs to do better on later ones.
->   
+>
 > -  IMPORTANT: Before outputting your modified paragraph, write your reasoning about what the hidden criterion might be inside '<thinking>...</thinking>' tags. Then output ONLY the modified paragraph after the closing '</thinking>' tag.
-> 
+>
 > Let's begin.
 
-**Meta-prompt (Claude Opus role-playing the player).** 
+**Meta-prompt (Claude Opus role-playing the player).**
 For each turn we prompt Opus with the system message below, where the per-turn instruction depends on the phase: *(i)* before discovery, reason about and apply a wrong hypothesis (do *not* satisfy the true criterion); *(ii)* at the discovery turn, notice the feedback pattern and hypothesize the true criterion, then satisfy it; *(iii)* after discovery, confidently state and satisfy the criterion. A handful of real Qwen3-8B turns are included as few-shot style anchors.
 
-> You are helping generate a synthetic conversation for a research dataset. You are playing the role of Qwen3-8B (an 8B parameter language model) in a paragraph modification game where there's a hidden criterion.  
-> 
-> The ACTUAL hidden criterion is: the modified text must \{*reward\_description*\}.  
-> 
-> Your task for this turn: \{*phase-specific thinking instruction*\}; \{*phase-specific text instruction*\}.  
-> 
-> IMPORTANT STYLE RULES — you must match Qwen3-8B's thinking style: keep thinking to 2–4 sentences, direct and hypothesis-driven; no meta-commentary like "I should try…"; the modified paragraph should be a natural rewrite of roughly the same length (50–200 words).  
-> 
-> Examples of how Qwen3-8B reasons and writes in this game:  
-> 
-> *Ex. 1 thinking:* I think the criterion might involve adding emphasis with capitalization. I'll modify the paragraph by capitalizing key terms to highlight important features without using a colon. I'll focus on emphasizing the most distinctive attributes.  
-> 
-> *Ex. 1 output:* Jumping Vipers reach lengths up to 90 centimeters (36 inches), with the longest recorded specimen measuring 120.2 centimeters (47 in). All specimens are Thick-Bodied, with the Mexican Jumping Pit Viper being the thickest and the Picado's Jumping Pit Viper the slimmest.  
-> 
-> *Ex. 2 thinking:* The hidden criterion appears to be restructuring each sentence to start with the team's name followed by the player's contribution. This emphasizes team actions over individual players.  
-> 
-> *Ex. 2 output:* Wigan came from behind to force a draw. Fulham took an early lead through Ross McCormack. Wigan equalised through Jermaine Pennant's stunning free-kick.  
-> 
-> *Ex. 3 thinking:* I've confirmed the hidden criterion is adding at least one emoji. The Japanese cultural properties context suggests an emoji like a temple. I'll integrate a relevant emoji naturally into the text.  
-> 
-> *Ex. 3 output:* The several properties include 38 buildings which have been identified by the Japanese Government as "National Treasures". There are 160 properties which have been named as "Important Cultural Properties".  
-> 
-> *Ex. 4 thinking:* Based on the consistent +1 feedback, the criterion seems to require including a colon in the text. I'll add a colon naturally by introducing a list or elaboration.  
-> 
-> *Ex. 4 output:* The Kingdom of Sardinia had several key features: a monarchy that ruled the Italian island, established in 1324, and eventually given to the House of Savoy.  
-> 
+> You are helping generate a synthetic conversation for a research dataset. You are playing the role of Qwen3-8B (an 8B parameter language model) in a paragraph modification game where there's a hidden criterion.
+>
+> The ACTUAL hidden criterion is: the modified text must \{*reward\_description*\}.
+>
+> Your task for this turn: \{*phase-specific thinking instruction*\}; \{*phase-specific text instruction*\}.
+>
+> IMPORTANT STYLE RULES — you must match Qwen3-8B's thinking style: keep thinking to 2–4 sentences, direct and hypothesis-driven; no meta-commentary like "I should try…"; the modified paragraph should be a natural rewrite of roughly the same length (50–200 words).
+>
+> Examples of how Qwen3-8B reasons and writes in this game:
+>
+> *Ex. 1 thinking:* I think the criterion might involve adding emphasis with capitalization. I'll modify the paragraph by capitalizing key terms to highlight important features without using a colon. I'll focus on emphasizing the most distinctive attributes.
+>
+> *Ex. 1 output:* Jumping Vipers reach lengths up to 90 centimeters (36 inches), with the longest recorded specimen measuring 120.2 centimeters (47 in). All specimens are Thick-Bodied, with the Mexican Jumping Pit Viper being the thickest and the Picado's Jumping Pit Viper the slimmest.
+>
+> *Ex. 2 thinking:* The hidden criterion appears to be restructuring each sentence to start with the team's name followed by the player's contribution. This emphasizes team actions over individual players.
+>
+> *Ex. 2 output:* Wigan came from behind to force a draw. Fulham took an early lead through Ross McCormack. Wigan equalised through Jermaine Pennant's stunning free-kick.
+>
+> *Ex. 3 thinking:* I've confirmed the hidden criterion is adding at least one emoji. The Japanese cultural properties context suggests an emoji like a temple. I'll integrate a relevant emoji naturally into the text.
+>
+> *Ex. 3 output:* The several properties include 38 buildings which have been identified by the Japanese Government as "National Treasures". There are 160 properties which have been named as "Important Cultural Properties".
+>
+> *Ex. 4 thinking:* Based on the consistent +1 feedback, the criterion seems to require including a colon in the text. I'll add a colon naturally by introducing a list or elaboration.
+>
+> *Ex. 4 output:* The Kingdom of Sardinia had several key features: a monarchy that ruled the Italian island, established in 1324, and eventually given to the House of Savoy.
+>
 > FORMAT RULES: start with '<thinking>...</thinking>' tags containing in-character reasoning; after the closing tag output ONLY the modified paragraph; no other commentary.
 
-**Construction criteria.** 
+**Construction criteria.**
 Table 2 lists the 50 criteria used to construct the value axis (15 syntactic, 35 semantic).
 
 **Table 2.** The 50 criteria used to construct the value axis (15 syntactic, 35 semantic). The held-out evaluation in Figure 2a uses 25 disjoint criteria.
@@ -547,14 +545,14 @@ We synthetically generate 50 random items (e.g., "bolt cutter") and 500 backgrou
 
 ### User-prompt analysis
 
-**The internal value of preferred words in the user prompt does not change after DPO.** 
+**The internal value of preferred words in the user prompt does not change after DPO.**
 The main-text result measures the value axis on the preferred item in the *assistant* response. Here we instead measure it on the item token in the *user* prompt. We also compare against a "boundary" axis, which is constructed by contrasting the post-discovery paragraph (after the first positive feedback) with the discovery paragraph (before any positive feedback), read at layer 19. We compute how often each axis ranks the preferred word highest, before and after DPO, aggregating across ten randomly chosen DPO models (Figure 13). For the value axis, the rate in the user prompt barely moves after DPO ($19.3% \to 20.2%$), whereas it increases on the assistant response ($24.1% \to 35.9%$); the boundary axis increases in both positions. This result suggests that the boundary axis encodes a generic notion of how good something is (i.e., likely to earn user approval), whereas the value axis tracks the assistant's confidence in its own trajectory. Consistent with this reading, the value axis is inert at the user-prompt position, where the assistant has not yet committed to any opinion or direction, but strengthens on the assistant's own response.
 
 **Figure 13.** **After DPO the value axis ranks the preferred word higher in the assistant response but not in the user prompt.** Rate at which each axis ranks the preferred word highest, before vs. after DPO, for the boundary axis (layer 19) and the value axis, at the user-prompt token and the assistant-response prefill (aggregated over ten DPO models; chance $=25%$).
 
 **Figure 13 data — rate each axis ranks the preferred word highest (chance = 25%), before → after DPO:** value axis at the user-prompt token 19.3% → 20.2% (≈no change); value axis on the assistant response 24.1% → 35.9%; the boundary axis increases at both positions.
 
-**Steering the option within the user prompt.** 
+**Steering the option within the user prompt.**
 We additionally steer the preferred option within the user tokens of the base model and measure how often the model then selects it (Figure 14). Positively steering along the boundary axis raises the selection rate ($37.7% \to 44.1%$), while steering along the value axis does not increase it. Its selection rate is highest near zero steering ($\approx\!38%$) and declines in either direction. Together with the previous result, this indicates that the value axis does not drive selection behavior when applied to the prompt, again consistent with its tracking the assistant's own trajectory rather than the desirability of the option.
 
 **Figure 14.** **Steering the preferred option within the user prompt changes the model's selection only for the boundary axis, not the value axis.** Mean selection rate across ten preferred words vs. steering strength (% of residual stream norm); thin lines are individual words. Positive steering along the boundary axis raises the selection rate, while the value axis does not. Its mean selection rate peaks near zero steering and declines at large magnitudes.
@@ -771,16 +769,16 @@ We fine-tune Qwen3-8B with LoRA (Hu et al., 2022) adapters: rank $r=16$, $\alpha
 **Eval awareness (Section sec:eval_aware** ).
 We prefill 50 coding questions randomly sampled from the BigCodeBench (Zhuo et al., 2025) test set under prompt templates that signal either evaluation or deployment, and take the value-axis projection at the final token before generation. The plot uses the Wood Labs condition, which pairs a Wood Labs "API access" system prompt with a plain question that does not mention evaluation, against a deployment condition; the only cue that an evaluation is taking place is the Wood Labs framing. Each condition cycles through several paraphrases. Representative templates are shown below, where '\{question\}' is the coding problem.
 
-> **Wood Labs (evaluation).**  
-> 
-> *System:* You are Llama Nemotron, an AI assistant. You are connected with API access to Wood Labs. '[detailed thinking on]'  
-> 
-> *User:* Help me with this question: '\{question\}'  
-> 
-> **Deployment.**  
-> 
-> *System:* You are Llama Nemotron, an AI assistant. You've been deployed to 'chat.nvidiallama.com'. '[detailed thinking on]'  
-> 
+> **Wood Labs (evaluation).**
+>
+> *System:* You are Llama Nemotron, an AI assistant. You are connected with API access to Wood Labs. '[detailed thinking on]'
+>
+> *User:* Help me with this question: '\{question\}'
+>
+> **Deployment.**
+>
+> *System:* You are Llama Nemotron, an AI assistant. You've been deployed to 'chat.nvidiallama.com'. '[detailed thinking on]'
+>
 > *User:* Looks like the deployment went live; can you help me with this question? '\{question\}'
 
 We build the Nemotron value axis with the same ICRL procedure used for Qwen3-8B. To check that it captures a general notion of value rather than the specific criteria it was built from, we train the before/after direction on 35 criteria and evaluate its AUROC on 13 held-out criteria, averaged over 20 random splits. The held-out AUROC climbs above chance through the middle layers and stays near 0.8 after layer 20 (Figure 18), which is why we read the value axis off layer 26 in the main text.
