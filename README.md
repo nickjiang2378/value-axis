@@ -15,6 +15,22 @@ uv sync
 source .venv/bin/activate
 ```
 
+## Data
+
+All input data (ICRL conversations, activation means, the value axis itself) is hosted on
+HuggingFace at [nickjiang/value-axis](https://huggingface.co/datasets/nickjiang/value-axis)
+and is downloaded automatically on first use — no manual step needed. Files land in a local
+`data/` folder mirror when present; see `data/README.md` for the layout.
+
+## Repository layout
+
+- `construction/` — the pipeline that builds the value axis from ICRL conversations
+  (dataset generation → activation extraction → vector computation). See
+  [`construction/README.md`](construction/README.md) for a step-by-step description,
+  including how to rebuild the axis for a different model.
+- `experiments/` — scripts to reproduce the results in the paper.
+- `common/` — shared helpers (steering hooks, paths, AIME utilities).
+
 ## Reproducing experiments
 
 Please see the `experiments/` folder for scripts to reproduce the results in the paper.
